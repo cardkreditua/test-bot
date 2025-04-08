@@ -11,27 +11,26 @@ from matcher import get_services_for_product
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Обработка команд /start
+# Обработка команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привіт! Напиши мені назву товару, і я підкажу, які сервіси можна запропонувати.")
+    await update.message.reply_text(
+        "Привіт! Напиши мені назву товару, і я підкажу, які сервіси можна запропонувати."
+    )
 
-# Обработка входящих сообщений
+# Обработка обычного текста
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     try:
         reply = get_services_for_product(user_message)
         await update.message.reply_text(reply)
     except Exception as e:
-        await update.message.reply_text("Сталася помилка при обробці. Спробуйте пізніше.")
-        print(f"Error: {e}")
+        await update.message.reply_text("Виникла помилка при обробці запиту. Спробуйте пізніше.")
 
-# Основная функция запуска
+# Запуск бота
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("Бот запущено.")
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     app.run_polling()
+
 
