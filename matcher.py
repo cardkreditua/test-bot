@@ -1,50 +1,33 @@
-import os
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    MessageHandler,
-    CommandHandler,
-    filters
-)
-from openai import OpenAI
-from matcher import get_services_for_product
+import json
+import difflib
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Загрузка базы категорий и сервисов
+with open("services_data.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
 
-# Ответ на запрос
-def support_response(product_name):
-    category, services = get_services_for_product(product_name)
+def find_category(product_name):
+    product_name = product_name.lower()
+    matches = []
+
+    for category, values in data.items():
+        for keyword in values.get("keywords", []):
+            ratio = difflib.SequenceMatcher(None, product_name, keyword.lower()).ratio()
+            if ratio > 0.6:  # Порог для "похожести"
+                matches.append((category, ratio))
+
+    if matches:
+        best_match = sorted(matches, key=lambda x: -x[1])[0]
+        return best_match[0]
+    return None
+
+def get_services_for_product(product_name):
+    category = find_category(product_name)
     if not category:
-        return "Не вдалося визначити категорію товару. Будь ласка, перевірте назву або зверніться до менеджера SUPPORT.UA."
+        return "На жаль, я не можу визначити категорію товару. Зверніться до менеджера SUPPORT.UA."
 
-    response = f"✅ Категорія: *{category}*\n📦 Доступні сервіси:\n"
+    services = data[category]["services"]
+    response_lines = [f"Категорія: {category}\nДоступні сервіси:"]
     for service in services:
-        response += f"• {service}\n"
-    return response
-
-# Обработка сообщений
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    try:
-        reply = support_response(user_message)
-    except Exception as e:
-        reply = f"Сталася помилка: {e}"
-
-    await update.message.reply_text(reply, parse_mode="Markdown")
-
-# Запуск
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", handle_message))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/"
-    )
-
-if __name__ == '__main__':
-    main()
+        response_lines.append(f"- {service['name']}: {service['desc']}")
+    return "\n".join(response_lines)
 
