@@ -1,69 +1,59 @@
 import os
+import json
 import openai
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
+    ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 )
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.document_loaders import JSONLoader
+from langchain.text_splitter import CharacterTextSplitter
 
-# Завантаження токенів
+# Змінні середовища
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-# Ініціалізація клієнта OpenAI
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-# Системний промпт з повним переліком сервісів і правилами
-SYSTEM_PROMPT = (
-    "Ти асистент-продавець ROZETKA. Коли користувач вводить назву товару, посилання або код, "
-    "ти чітко й стисло відповідаєш, які сервіси SUPPORT.UA можна до нього запропонувати. Відповідь тільки українською мовою.\n"
-    "\n"
-    "Ось приклади категорій і сервісів, які можна до них запропонувати:\n"
-    "Смартфони: +1, +2, +3 роки гарантії, Повний захист, Захист від пошкоджень, Вільний вибір\n"
-    "Холодильники, Пральні машини: +1, +2, +3 роки гарантії, Захист від пошкоджень, Мій сервіс для великої побутової техніки\n"
-    "Планшети, Ноутбуки: +1, +2, +3 роки гарантії, Повний захист, Захист від пошкоджень\n"
-    "Телевізори: +1, +2, +3 роки гарантії, Повний захист, Захист від пошкоджень\n"
-    "Мікрохвильовки, Блендери, Кавомашини: +1, +2, +3 роки гарантії, Повний захист, Захист від пошкоджень\n"
-    "Фітнес-браслети, Навушники: +1, +2, +3 роки гарантії, Захист від пошкоджень, Повний захист\n"
-    "Іграшки, дитячі пристрої: Бумеранг\n"
-    "Електротранспорт: Альфа-сервіс, +1, +2, +3 роки гарантії\n"
-    "Інше — якщо сервісів немає, напиши: На жаль, немає сервісів для цієї категорії.\n"
-    "\n"
-    "Не вигадуй сервісів, яких не існує. Якщо не впевнений — порадь звернутись до менеджерів SUPPORT.UA."
+# Завантаження бази знань
+loader = JSONLoader(
+    file_path="knowledge_base.json",
+    jq_schema=".",  # завантажує весь json
+    text_content=False
 )
+data = loader.load()
+text_splitter = CharacterTextSplitter(chunk_size=300, chunk_overlap=20)
+docs = text_splitter.split_documents(data)
 
-# Обробка /start
+# Індексування
+embedding = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+db = FAISS.from_documents(docs, embedding)
+retriever = db.as_retriever()
+
+# Ланцюжок QA
+llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
+qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привіт! Напиши назву товару, і я підкажу, які сервіси SUPPORT.UA можна до нього запропонувати."
-    )
+    await update.message.reply_text("Привіт! Введи назву товару, і я підкажу, які сервіси можна запропонувати.")
 
 # Обробка повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.strip()
-
+    query = update.message.text.strip()
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ]
-        )
-        reply = response.choices[0].message.content
-        await update.message.reply_text(reply)
-
+        answer = qa_chain.run(query)
+        await update.message.reply_text(answer)
     except Exception as e:
-        await update.message.reply_text("Сталася помилка. Спробуйте ще раз пізніше.")
-        print(f"[OpenAI error]: {e}")
+        await update.message.reply_text("Помилка при обробці запиту.")
+        print(e)
 
-# Запуск бота
+# Запуск
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
-
