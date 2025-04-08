@@ -1,6 +1,7 @@
 import os
 import json
-from telegram import Update
+from fastapi import FastAPI, Request
+from telegram import Update, Bot
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -13,12 +14,13 @@ from langchain.vectorstores import FAISS
 from langchain.schema import Document
 import openai
 
-# Завантаження токенів
+# Змінні середовища
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # типу: https://your-app-name.onrender.com/webhook
 
-# Системний промпт
+# GPT налаштування
+openai.api_key = OPENAI_API_KEY
 SYSTEM_PROMPT = (
     "Ти асистент-продавець ROZETKA. Коли користувач вводить назву товару, посилання на товар або код, "
     "ти чітко і стисло відповідаєш, які сервіси SUPPORT.UA можна до нього запропонувати. "
@@ -27,7 +29,7 @@ SYSTEM_PROMPT = (
     "Враховуй тип товару. Якщо сервісів немає — чітко вкажи це. Відповідай українською, без фантазій чи зайвого тексту."
 )
 
-# Генерація індексу з knowledge_base.json
+# Побудова векторного індексу
 if os.path.exists("knowledge_base.json"):
     with open("knowledge_base.json", "r", encoding="utf-8") as f:
         raw_data = json.load(f)
@@ -44,11 +46,15 @@ if os.path.exists("knowledge_base.json"):
 else:
     raise FileNotFoundError("Файл knowledge_base.json не знайдено")
 
-# Обробка команди /start
+# Telegram бот
+bot = Bot(token=BOT_TOKEN)
+app = FastAPI()
+
+telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# Обробка /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привіт! Напиши назву товару, і я підкажу, які сервіси SUPPORT.UA можна до нього запропонувати."
-    )
+    await update.message.reply_text("Привіт! Напиши назву товару, і я підкажу, які сервіси SUPPORT.UA можна до нього запропонувати.")
 
 # Обробка повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,9 +78,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Сталася помилка. Спробуйте ще раз пізніше.")
         print(f"[OpenAI error]: {e}")
 
-# Запуск бота
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling()
+# Підключення Telegram до FastAPI webhook
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, bot)
+    await telegram_app.process_update(update)
+    return {"status": "ok"}
+
+# Запуск Telegram App (внутрішній цикл)
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+
+@app.on_event("startup")
+async def startup():
+    await bot.set_webhook(url=WEBHOOK_URL)
+    print("Webhook встановлено.")
+
+
