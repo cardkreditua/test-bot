@@ -9,46 +9,45 @@ from telegram.ext import (
     filters,
 )
 
-# Завантаження токенів
+# Завантаження токенів з середовища
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-# Створення клієнта OpenAI (новий SDK)
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-# Системний промпт
+# SYSTEM PROMPT (адаптовано під твою задачу)
 SYSTEM_PROMPT = (
     "Ти асистент-продавець ROZETKA. Коли користувач вводить назву товару, посилання на товар або код, "
     "ти чітко і стисло відповідаєш, які сервіси SUPPORT.UA можна до нього запропонувати. "
     "Серед сервісів: +1/+2/+3 роки гарантії, Альфа-сервіс, Вільний вибір, Бумеранг, Повернення без проблем, "
     "SUPPORT для смартфонів, інші. "
-    "Враховуй тип товару. Якщо сервісів немає — чітко вкажи це. Відповідай українською, без фантазій чи зайвого тексту."
+    "Враховуй тип товару. Якщо сервісів немає — чітко вкажи це. Відповідай українською мовою. "
+    "Не вигадуй і не додавай зайвого тексту. "
 )
 
-# Обробка команди /start
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привіт! Напиши назву товару, і я підкажу, які сервіси SUPPORT.UA можна до нього запропонувати."
+        "Привіт! Напиши назву товару або встав посилання, і я підкажу, які сервіси SUPPORT.UA можна до нього запропонувати."
     )
 
-# Обробка повідомлень
+# Обробка запитів
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
 
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ]
         )
-        reply = response.choices[0].message.content
+        reply = response["choices"][0]["message"]["content"]
         await update.message.reply_text(reply)
 
     except Exception as e:
         await update.message.reply_text("Сталася помилка. Спробуйте ще раз пізніше.")
-        print(f"[OpenAI error]: {e}")  # лог помилки на Render
+        print(f"[OpenAI error]: {e}")
 
 # Запуск бота
 if __name__ == "__main__":
