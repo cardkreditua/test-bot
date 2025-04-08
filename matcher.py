@@ -2,10 +2,9 @@ import json
 import difflib
 
 # Загрузка базы категорий и сервисов
-with open("services_data_full.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-    
+with open("services_data.json", "r", encoding="utf-8") as f:
 
+    
 def find_category(product_name):
     product_name = product_name.lower()
     matches = []
