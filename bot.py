@@ -1,36 +1,33 @@
 import os
+import openai
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
     CommandHandler,
     MessageHandler,
-    filters
+    filters,
 )
-from matcher import get_services_for_product
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Обработка команды /start
+openai.api_key = OPENAI_API_KEY
+
+# Промпт для GPT
+SYSTEM_PROMPT = (
+    "Ти асистент-продавець ROZETKA. "
+    "Користувач вводить назву товару або опис. "
+    "Твоя задача — коротко і чітко відповісти, які послуги SUPPORT.UA можна запропонувати до цього товару. "
+    "Якщо товару немає у списку категорій, напиши: 'На жаль, я не можу визначити категорію товару. Зверніться до менеджера SUPPORT.UA.'."
+)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привіт! Напиши мені назву товару, і я підкажу, які сервіси можна запропонувати."
     )
 
-# Обработка обычного текста
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    try:
-        reply = get_services_for_product(user_message)
-        await update.message.reply_text(reply)
-    except Exception as e:
-        await update.message.reply_text("Виникла помилка при обробці запиту. Спробуйте пізніше.")
-
-# Запуск бота
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling()
+    user_input = update.message.text
 
 
