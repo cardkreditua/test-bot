@@ -23,6 +23,6 @@ def chatgpt_response(text):
     return response.choices[0].message.content
 
 # Обработка входящих сообщений
-async def handle_message(update: Update, context_
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
