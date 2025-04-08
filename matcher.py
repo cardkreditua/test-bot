@@ -12,7 +12,7 @@ def find_category(product_name):
     for category, values in data.items():
         for keyword in values.get("keywords", []):
             ratio = difflib.SequenceMatcher(None, product_name, keyword.lower()).ratio()
-            if ratio > 0.6:  # Порог для "похожести"
+            if ratio > 0.7:
                 matches.append((category, ratio))
 
     if matches:
