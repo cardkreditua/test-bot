@@ -8,49 +8,41 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.schema import Document
-from langchain.chains import RetrievalQA
-from openai import OpenAI
+import openai
 
 # Завантаження токенів
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-# Ініціалізація клієнта OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Системний промпт
+SYSTEM_PROMPT = (
+    "Ти асистент-продавець ROZETKA. Коли користувач вводить назву товару, посилання на товар або код, "
+    "ти чітко і стисло відповідаєш, які сервіси SUPPORT.UA можна до нього запропонувати. "
+    "Серед сервісів: +1/+2/+3 роки гарантії, Альфа-сервіс, Вільний вибір, Бумеранг, Повернення без проблем, "
+    "SUPPORT для смартфонів, інші. "
+    "Враховуй тип товару. Якщо сервісів немає — чітко вкажи це. Відповідай українською, без фантазій чи зайвого тексту."
+)
 
-# Шлях до бази знань
-KB_PATH = "knowledge_base.json"
-INDEX_PATH = "faiss_index"
-
-# Функція для створення FAISS-індексу
-def create_faiss_index():
-    with open(KB_PATH, "r", encoding="utf-8") as f:
-        kb_data = json.load(f)
+# Генерація індексу з knowledge_base.json
+if os.path.exists("knowledge_base.json"):
+    with open("knowledge_base.json", "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
 
     documents = []
-    for category in kb_data:
-        name = category.get("category", "")
-        keywords = ", ".join(category.get("keywords", []))
-        services = "\n".join([f"- {srv['name']}: {srv['desc']}" for srv in category.get("services", [])])
+    for entry in raw_data:
+        category = entry.get("category", "")
+        keywords = ", ".join(entry.get("keywords", []))
+        services = "\n".join([f"- {s['name']}: {s['desc']}" for s in entry.get("services", [])])
+        content = f"Категорія: {category}\nКлючові слова: {keywords}\nСервіси:\n{services}"
+        documents.append(Document(page_content=content))
 
-        full_text = f"Категорія: {name}\nКлючові слова: {keywords}\nСервіси:\n{services}"
-        documents.append(Document(page_content=full_text))
-
-    embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-    vectorstore = FAISS.from_documents(documents, embeddings)
-    vectorstore.save_local(INDEX_PATH)
-
-# Ініціалізація або завантаження індексу
-if not os.path.exists(INDEX_PATH):
-    create_faiss_index()
-
-embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-vectorstore = FAISS.load_local(INDEX_PATH, embeddings)
-retriever = vectorstore.as_retriever()
-qa_chain = RetrievalQA.from_chain_type(llm=client.chat.completions, retriever=retriever, return_source_documents=False)
+    vectorstore = FAISS.from_documents(documents, OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY))
+else:
+    raise FileNotFoundError("Файл knowledge_base.json не знайдено")
 
 # Обробка команди /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,12 +53,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обробка повідомлень
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
+
     try:
-        result = qa_chain.run(user_message)
-        await update.message.reply_text(result)
+        docs = vectorstore.similarity_search(user_message, k=3)
+        context_text = "\n".join([doc.page_content for doc in docs])
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT + "\nКонтекст:\n" + context_text},
+                {"role": "user", "content": user_message},
+            ]
+        )
+        reply = response["choices"][0]["message"]["content"]
+        await update.message.reply_text(reply)
+
     except Exception as e:
         await update.message.reply_text("Сталася помилка. Спробуйте ще раз пізніше.")
-        print(f"[LangChain error]: {e}")
+        print(f"[OpenAI error]: {e}")
 
 # Запуск бота
 if __name__ == "__main__":
