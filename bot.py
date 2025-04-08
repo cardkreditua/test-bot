@@ -24,5 +24,10 @@ def chatgpt_response(text):
 
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text
+    try:
+        reply = chatgpt_response(user_message)
+    except Exception as e:
+        reply = f"Произошла ошибка: {e}"
 
-
+    await update.message.reply_text(reply)
