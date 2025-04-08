@@ -3,8 +3,8 @@ import difflib
 
 # Загрузка базы категорий и сервисов
 with open("services_data.json", "r", encoding="utf-8") as f:
+    data = json.load(f)  # ВАЖНО! ЭТА СТРОКА ДОЛЖНА БЫТЬ ВНУТРИ БЛОКА
 
-    
 def find_category(product_name):
     product_name = product_name.lower()
     matches = []
@@ -12,7 +12,7 @@ def find_category(product_name):
     for category, values in data.items():
         for keyword in values.get("keywords", []):
             ratio = difflib.SequenceMatcher(None, product_name, keyword.lower()).ratio()
-            if ratio > 0.7:
+            if ratio > 0.7:  # Можешь изменить порог, если нужно
                 matches.append((category, ratio))
 
     if matches:
@@ -30,4 +30,3 @@ def get_services_for_product(product_name):
     for service in services:
         response_lines.append(f"- {service['name']}: {service['desc']}")
     return "\n".join(response_lines)
-
