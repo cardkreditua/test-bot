@@ -1,6 +1,7 @@
 python-telegram-bot==20.3
 openai==1.3.7
 langchain==0.1.14
+langchain-openai==0.0.8  # ✅ додати ось цей рядок
 faiss-cpu
 tiktoken
 fastapi
