@@ -52,14 +52,14 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         docs = vectorstore.similarity_search(query, k=3)
         context_text = "\n".join(doc.page_content for doc in docs)
 
-        response = openai.chat.completions.create(
+        response = openai.ChatCompletion.create(  # ✅ правильний виклик
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT + "\nКонтекст:\n" + context_text},
                 {"role": "user", "content": query}
             ]
         )
-        reply = response.choices[0].message.content
+        reply = response["choices"][0]["message"]["content"]
         await update.message.reply_text(reply)
 
     except Exception as e:
@@ -79,9 +79,22 @@ async def lifespan(app: FastAPI):
 # 🤖 FastAPI з lifespan
 app = FastAPI(lifespan=lifespan)
 
+# 🛡 Обробник для кореня (щоб не було 404 в логах)
+@app.get("/")
+async def root():
+    return {"message": "Бот працює! Webhook на /webhook"}
+
+# 📬 Обробка Telegram вебхука
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, bot)
     await application.update_queue.put(update)
     return {"ok": True}
+
+# 🚀 Автозапуск для локального режиму
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("bot:app", host="0.0.0.0", port=port)
+
