@@ -6,10 +6,11 @@ from telegram.ext import (
     Application, ApplicationBuilder, ContextTypes,
     CommandHandler, MessageHandler, filters
 )
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings  # ✅ новий імпорт
 from langchain.vectorstores import FAISS
 from langchain.schema import Document
 import openai
+from contextlib import asynccontextmanager  # ✅ для lifespan
 
 # 🔐 Токени
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -39,15 +40,8 @@ for entry in raw_data:
 
 vectorstore = FAISS.from_documents(documents, OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY))
 
-# 🤖 FastAPI
-app = FastAPI()
-
-@app.post("/webhook")
-async def telegram_webhook(req: Request):
-    data = await req.json()
-    update = Update.de_json(data, bot)
-    await application.update_queue.put(update)
-    return {"ok": True}
+# 📦 Telegram Application
+application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # 📬 /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,13 +69,23 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Вибач, сталася помилка. Спробуй ще раз пізніше.")
         print(f"Error: {e}")
 
-# 📦 Запуск Telegram Application
-application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 
-@app.on_event("startup")
-async def on_startup():
+# 🛠 Lifespan для FastAPI
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await bot.set_webhook(url=WEBHOOK_URL)
     print("✅ Webhook встановлено")
+    yield
+
+# 🤖 FastAPI з lifespan
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/webhook")
+async def telegram_webhook(req: Request):
+    data = await req.json()
+    update = Update.de_json(data, bot)
+    await application.update_queue.put(update)
+    return {"ok": True}
 
