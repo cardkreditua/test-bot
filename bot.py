@@ -92,9 +92,4 @@ async def telegram_webhook(req: Request):
     await application.update_queue.put(update)
     return {"ok": True}
 
-# 🚀 Автозапуск для локального режиму
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("bot:app", host="0.0.0.0", port=port)
 
