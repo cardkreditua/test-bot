@@ -60,7 +60,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"⚠️ Документів не знайдено за запитом: {query}")
 
         # Запит до OpenAI
-                response = openai.chat.completions.create(
+            response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT + "\nКонтекст:\n" + context_text},
