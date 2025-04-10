@@ -44,27 +44,38 @@ application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привіт! Напиши назву товару, і я підкажу сервіси SUPPORT.UA.")
 
-# 🧠 Обробка повідомлень
+# 🧠 Обробка повідомлень з повним логуванням
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
+    print(f"⚡️ Отримано повідомлення від користувача: {query}")
 
     try:
+        # Пошук в базі
         docs = vectorstore.similarity_search(query, k=3)
-        context_text = "\n".join(doc.page_content for doc in docs)
+        if docs:
+            context_text = "\n".join(doc.page_content for doc in docs)
+            print(f"📚 Знайдено {len(docs)} документ(и): {context_text}")
+        else:
+            context_text = ""
+            print(f"⚠️ Документів не знайдено за запитом: {query}")
 
-        response = openai.ChatCompletion.create(  # ✅ правильний виклик
+        # Запит до OpenAI
+                response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT + "\nКонтекст:\n" + context_text},
                 {"role": "user", "content": query}
             ]
         )
-        reply = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content
+
+        print(f"💬 Відповідь OpenAI: {reply}")
+
         await update.message.reply_text(reply)
 
     except Exception as e:
         await update.message.reply_text("Вибач, сталася помилка. Спробуй ще раз пізніше.")
-        print(f"Error: {e}")
+        print(f"❗ Помилка в обробці повідомлення: {e}")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
@@ -91,5 +102,4 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, bot)
     await application.update_queue.put(update)
     return {"ok": True}
-
 
