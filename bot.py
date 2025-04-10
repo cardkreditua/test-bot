@@ -2,11 +2,8 @@ import os
 import json
 from fastapi import FastAPI, Request
 from telegram import Update, Bot
-from telegram.ext import (
-    Application, ApplicationBuilder, ContextTypes,
-    CommandHandler, MessageHandler, filters
-)
-from langchain_openai import OpenAIEmbeddings
+from telegram.ext import Application, ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from langchain_openai import OpenAIEmbeddings 
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 import openai
@@ -43,9 +40,11 @@ vectorstore = FAISS.from_documents(documents, OpenAIEmbeddings(openai_api_key=OP
 # 📦 Telegram Application
 application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# 📬 /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привіт! Напиши назву товару, і я підкажу сервіси SUPPORT.UA.")
 
+# 🧠 Обробка повідомлень
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
 
@@ -53,14 +52,14 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         docs = vectorstore.similarity_search(query, k=3)
         context_text = "\n".join(doc.page_content for doc in docs)
 
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT + "\nКонтекст:\n" + context_text},
                 {"role": "user", "content": query}
             ]
         )
-        reply = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content
         await update.message.reply_text(reply)
 
     except Exception as e:
@@ -77,7 +76,7 @@ async def lifespan(app: FastAPI):
     print("✅ Webhook встановлено")
     yield
 
-# 🤖 FastAPI
+# 🤖 FastAPI з lifespan
 app = FastAPI(lifespan=lifespan)
 
 @app.post("/webhook")
@@ -86,5 +85,3 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, bot)
     await application.update_queue.put(update)
     return {"ok": True}
-
-
