@@ -6,11 +6,11 @@ from telegram.ext import (
     Application, ApplicationBuilder, ContextTypes,
     CommandHandler, MessageHandler, filters
 )
-from langchain_openai import OpenAIEmbeddings  # ✅ новий імпорт
-from langchain.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 import openai
-from contextlib import asynccontextmanager  # ✅ для lifespan
+from contextlib import asynccontextmanager
 
 # 🔐 Токени
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -43,11 +43,9 @@ vectorstore = FAISS.from_documents(documents, OpenAIEmbeddings(openai_api_key=OP
 # 📦 Telegram Application
 application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# 📬 /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привіт! Напиши назву товару, і я підкажу сервіси SUPPORT.UA.")
 
-# 🧠 Обробка повідомлень
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
 
@@ -79,7 +77,7 @@ async def lifespan(app: FastAPI):
     print("✅ Webhook встановлено")
     yield
 
-# 🤖 FastAPI з lifespan
+# 🤖 FastAPI
 app = FastAPI(lifespan=lifespan)
 
 @app.post("/webhook")
@@ -88,4 +86,5 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, bot)
     await application.update_queue.put(update)
     return {"ok": True}
+
 
